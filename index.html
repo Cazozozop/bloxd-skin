@@ -2,21 +2,51 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Bloxd Skin Previewer</title>
+  <title>Skin Editor - Bloxd</title>
   <style>
-    body { font-family: sans-serif; background: #121212; color: white; text-align: center; padding: 20px; }
-    canvas { background: #000; margin-top: 20px; }
-    input, button { margin: 10px; padding: 10px; font-size: 1em; }
-    textarea { width: 95%; height: 160px; margin-top: 20px; font-size: 0.9em; background: #1e1e1e; color: #00ff90; border: none; }
+    body {
+      background-color: #1a1a1a;
+      color: white;
+      font-family: sans-serif;
+      text-align: center;
+      padding: 20px;
+    }
+    canvas {
+      background: #000;
+      margin-top: 10px;
+    }
+    input, button {
+      margin: 10px;
+      padding: 10px;
+      font-size: 1em;
+    }
+    textarea {
+      width: 95%;
+      height: 160px;
+      margin-top: 20px;
+      font-size: 0.9em;
+      background: #1e1e1e;
+      color: #00ff90;
+      border: none;
+    }
+    #texturePreview {
+      image-rendering: pixelated;
+      margin-top: 10px;
+      border: 2px solid white;
+      max-width: 256px;
+    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.0/dist/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
 </head>
 <body>
 
-  <h1>💠 Bloxd Skin Pack avec Preview</h1>
+  <h1>🎨 Éditeur de Skin Bloxd</h1>
+
   <input type="file" id="textureInput" accept="image/*" />
   <button id="downloadBtn">📦 Télécharger les GLB avec skin</button>
+  <br>
+  <img id="texturePreview" alt="Aperçu de la texture" />
 
   <div id="previewContainer"></div>
 
@@ -35,71 +65,78 @@ api.updateEntityNodeMeshAttachment(myId, "LegRightMesh", "BloxdBlock", {blockNam
     import { GLTFExporter } from "https://unpkg.com/three@0.158.0/examples/jsm/exporters/GLTFExporter.js";
     import { OrbitControls } from "https://unpkg.com/three@0.158.0/examples/jsm/controls/OrbitControls.js";
 
-    const parts = [
+    const previewContainer = document.getElementById("previewContainer");
+    const textureInput = document.getElementById("textureInput");
+    const texturePreview = document.getElementById("texturePreview");
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x111111);
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / 500, 0.1, 100);
+    camera.position.set(1, 1.2, 2);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth * 0.6, 500);
+    previewContainer.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    const light = new THREE.HemisphereLight(0xffffff, 0x444444, 1.2);
+    scene.add(light);
+
+    let zip = new JSZip();
+    const glbFolder = zip.folder("models");
+    const loader = new GLTFLoader();
+    const textureLoader = new THREE.TextureLoader();
+
+    const partNames = [
       { name: "Blue Balloon", position: [0.35, 0.55, 0] },   // ArmRight
       { name: "Black Balloon", position: [-0.35, 0.55, 0] }, // ArmLeft
       { name: "Brown Balloon", position: [0, 1.1, 0] },      // Head
-      { name: "Cyan Balloon", position: [0, 0.5, 0] },       // Body
+      { name: "Cyan Balloon", position: [0, 0.5, 0] },       // Torso
       { name: "Green Balloon", position: [-0.15, 0.0, 0] },  // LegLeft
       { name: "Red Balloon", position: [0.15, 0.0, 0] }      // LegRight
     ];
 
-    const textureInput = document.getElementById('textureInput');
-    const previewContainer = document.getElementById('previewContainer');
-    const zip = new JSZip();
-    const glbFolder = zip.folder("models");
-    let textureDataURL;
-
-    // Setup 3D
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x111111);
-    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / 500, 0.1, 100);
-    camera.position.set(1, 1.2, 2);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth * 0.6, 500);
-    previewContainer.appendChild(renderer.domElement);
-    const controls = new OrbitControls(camera, renderer.domElement);
-    const light = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
-    scene.add(light);
-
-    const loader = new GLTFLoader();
-    const textureLoader = new THREE.TextureLoader();
-
     textureInput.addEventListener("change", async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = async () => {
-        textureDataURL = reader.result;
-        const texture = await textureLoader.loadAsync(textureDataURL);
-        texture.flipY = false;
 
-        // Supprimer ancienne preview
-        while (scene.children.length > 1) scene.remove(scene.children[1]);
+      const url = URL.createObjectURL(file);
+      texturePreview.src = url;
 
-        for (let part of parts) {
-          const url = `https://github.com/Cazozozop/bloxd-skin/raw/main/${part.name}.glb`;
-          const gltf = await loader.loadAsync(url);
+      const texture = await textureLoader.loadAsync(url);
+      texture.flipY = false;
+      texture.magFilter = THREE.NearestFilter;
+      texture.minFilter = THREE.NearestFilter;
 
-          gltf.scene.traverse(child => {
-            if (child.isMesh) {
-              child.material.map = texture;
-              child.material.needsUpdate = true;
-            }
-          });
+      // Supprimer ancienne preview
+      while (scene.children.length > 1) scene.remove(scene.children[1]);
 
-          // Ajouter à la scène
-          gltf.scene.position.set(...part.position);
-          scene.add(gltf.scene);
+      const skinGLTF = await loader.loadAsync("https://github.com/Cazozozop/bloxd-skin/raw/main/Skin.gltf");
 
-          // Exporter avec texture
-          const exporter = new GLTFExporter();
-          exporter.parse(gltf.scene, glb => {
-            glbFolder.file("INTERNAL_MESH_" + part.name + ".glb", glb);
-          }, { binary: true });
+      skinGLTF.scene.traverse(child => {
+        if (child.isMesh) {
+          child.material.map = texture;
+          child.material.needsUpdate = true;
         }
-      };
-      reader.readAsDataURL(file);
+      });
+
+      scene.add(skinGLTF.scene);
+
+      // Générer les 6 parties en GLB
+      for (const part of partNames) {
+        const partGLTF = await loader.loadAsync(`https://github.com/Cazozozop/bloxd-skin/raw/main/${part.name}.glb`);
+        partGLTF.scene.traverse(child => {
+          if (child.isMesh) {
+            child.material.map = texture;
+            child.material.needsUpdate = true;
+          }
+        });
+
+        const exporter = new GLTFExporter();
+        exporter.parse(partGLTF.scene, glb => {
+          glbFolder.file("INTERNAL_MESH_" + part.name + ".glb", glb);
+        }, { binary: true });
+      }
     });
 
     function animate() {
@@ -110,8 +147,8 @@ api.updateEntityNodeMeshAttachment(myId, "LegRightMesh", "BloxdBlock", {blockNam
     animate();
 
     document.getElementById("downloadBtn").addEventListener("click", async () => {
-      if (!textureDataURL) {
-        alert("Ajoute une texture d'abord !");
+      if (!glbFolder) {
+        alert("Importe d’abord une texture !");
         return;
       }
       const blob = await zip.generateAsync({ type: "blob" });
