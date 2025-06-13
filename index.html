@@ -1,102 +1,116 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <title>Bloxd Skin Viewer</title>
+  <meta charset="UTF-8">
+  <title>Bloxd Skin Pack Builder</title>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.0/dist/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
   <style>
-    body { margin: 0; overflow: hidden; background: #111; }
-    #uploader {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      z-index: 1;
-      background: white;
-      padding: 10px;
-      border-radius: 6px;
-    }
+    body { font-family: sans-serif; background: #1e1e1e; color: white; text-align: center; padding: 20px; }
+    button, input[type="file"] { margin: 10px; padding: 10px; font-size: 1em; }
+    textarea { width: 90%; height: 200px; margin-top: 20px; }
   </style>
 </head>
 <body>
-  <div id="uploader">
-    <input type="file" id="textureInput" accept="image/*" />
-  </div>
+
+  <h1>💠 Bloxd Custom Skin Generator</h1>
+  <input type="file" id="textureInput" accept="image/*" />
+  <br>
+  <button id="generateZip">📦 Télécharger le pack ZIP</button>
+  <button id="copyCode">📋 Copier le code API</button>
+
+  <textarea id="codeOutput" readonly placeholder="Ton code API apparaîtra ici..."></textarea>
 
   <script type="module">
-    import * as THREE from "https://unpkg.com/three@0.158.0/build/three.module.js";
     import { GLTFLoader } from "https://unpkg.com/three@0.158.0/examples/jsm/loaders/GLTFLoader.js";
-    import { OrbitControls } from "https://unpkg.com/three@0.158.0/examples/jsm/controls/OrbitControls.js";
+    import * as THREE from "https://unpkg.com/three@0.158.0/build/three.module.js";
 
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 100);
-    camera.position.set(0, 1.6, 3);
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
-
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.target.set(0, 1, 0);
-    controls.update();
-
-    const loader = new GLTFLoader();
-
-    const baseUrl = "https://github.com/Cazozozop/bloxd-skin/raw/main/";
-    const parts = [
-      { name: "Head",     y: 1.6 },
-      { name: "Body",     y: 1.0 },
-      { name: "ArmRight", y: 1.0, x: -0.6 },
-      { name: "ArmLeft",  y: 1.0, x: 0.6 },
-      { name: "LegRight", y: 0.4, x: -0.3 },
-      { name: "LegLeft",  y: 0.4, x: 0.3 }
+    const balloonNames = [
+      "Blue Balloon",
+      "Black Balloon",
+      "Brown Balloon",
+      "Cyan Balloon",
+      "Green Balloon",
+      "Red Balloon"
     ];
 
-    const models = [];
+    const zip = new JSZip();
+    const codeOutput = document.getElementById("codeOutput");
+    const textureInput = document.getElementById("textureInput");
+    let textureDataURL = null;
 
-    // Charger toutes les parties
-    parts.forEach(part => {
-      loader.load(baseUrl + part.name + ".glb", gltf => {
-        const model = gltf.scene;
-        model.position.set(part.x || 0, part.y, part.z || 0);
-        scene.add(model);
-        models.push(model);
-      });
-    });
-
-    // Appliquer une texture choisie
-    document.getElementById("textureInput").addEventListener("change", function (e) {
+    textureInput.addEventListener("change", (e) => {
       const file = e.target.files[0];
       if (!file) return;
-
       const reader = new FileReader();
-      reader.onload = function (event) {
-        const texture = new THREE.TextureLoader().load(event.target.result, () => {
-          texture.flipY = false;
-          models.forEach(model => {
-            model.traverse(child => {
-              if (child.isMesh) {
-                child.material.map = texture;
-                child.material.needsUpdate = true;
-              }
-            });
-          });
-        });
+      reader.onload = () => {
+        textureDataURL = reader.result;
+        alert("✅ Texture importée !");
       };
       reader.readAsDataURL(file);
     });
 
-    // Redimensionner
-    window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
+    async function applyTextureToGLB(url, textureURL) {
+      const loader = new GLTFLoader();
+      const gltf = await loader.loadAsync(url);
+      const texture = await new THREE.TextureLoader().loadAsync(textureURL);
+      texture.flipY = false;
+
+      gltf.scene.traverse(child => {
+        if (child.isMesh) {
+          child.material.map = texture;
+          child.material.needsUpdate = true;
+        }
+      });
+
+      // Export en glb avec texture
+      const { GLTFExporter } = await import("https://unpkg.com/three@0.158.0/examples/jsm/exporters/GLTFExporter.js");
+      const exporter = new GLTFExporter();
+      return new Promise((resolve) => {
+        exporter.parse(gltf.scene, (gltfBinary) => {
+          resolve(gltfBinary);
+        }, { binary: true });
+      });
+    }
+
+    document.getElementById("generateZip").addEventListener("click", async () => {
+      if (!textureDataURL) {
+        alert("Importe une texture d'abord !");
+        return;
+      }
+
+      const modelFolder = zip.folder("models");
+      const codeLines = [];
+
+      for (let name of balloonNames) {
+        const cleanName = "INTERNAL_MESH_" + name + ".glb";
+        const url = `https://github.com/Cazozozop/bloxd-skin/raw/main/${name}.glb`;
+
+        try {
+          const glbBinary = await applyTextureToGLB(url, textureDataURL);
+          modelFolder.file(cleanName, glbBinary);
+          codeLines.push(
+            `api.updateEntityNodeMeshAttachment(myId, "${name}", "Custom", {meshName: "${cleanName}", size: 1}, [0,0,0], [0,0,0])`
+          );
+        } catch (e) {
+          console.error("Erreur sur", name, e);
+        }
+      }
+
+      // Mettre à jour le champ code
+      codeOutput.value = codeLines.join("\n");
+
+      // Générer le zip
+      const blob = await zip.generateAsync({ type: "blob" });
+      saveAs(blob, "Custom Skin.zip");
     });
 
-    // Animation
-    function animate() {
-      requestAnimationFrame(animate);
-      renderer.render(scene, camera);
-    }
-    animate();
+    document.getElementById("copyCode").addEventListener("click", () => {
+      codeOutput.select();
+      document.execCommand("copy");
+      alert("📋 Code copié !");
+    });
   </script>
+
 </body>
 </html>
