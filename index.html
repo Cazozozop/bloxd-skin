@@ -33,6 +33,36 @@
     <h2>👤 Prévisualisation du skin</h2>
     <div id="viewer"></div>
   </div>
+<!-- Place ce code dans le body de ta page -->
+<div id="customConsole" style="background:#222; color:#0f0; font-family: monospace; height:200px; overflow-y:auto; padding:10px;"></div>
+
+<script>
+  (function() {
+    const consoleDiv = document.getElementById('customConsole');
+    function logToDiv(...args) {
+      const msg = args.map(a => {
+        if (typeof a === 'object') return JSON.stringify(a);
+        return a;
+      }).join(' ');
+      consoleDiv.textContent += msg + '\n';
+      consoleDiv.scrollTop = consoleDiv.scrollHeight;
+    }
+
+    // Override console.log, console.error, etc.
+    const originalLog = console.log;
+    console.log = function(...args) {
+      originalLog.apply(console, args);
+      logToDiv(...args);
+    };
+    const originalError = console.error;
+    console.error = function(...args) {
+      originalError.apply(console, args);
+      logToDiv("ERROR: ", ...args);
+    };
+
+    // Tu peux ajouter plus selon besoin (warn, info...)
+  })();
+</script>
 
   <div>
     <h2>📜 Code Bloxd (fixe)</h2>
