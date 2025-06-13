@@ -1,43 +1,41 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <title>Bloxd Skin Editor</title>
+  <meta charset="UTF-8" />
+  <title>Bloxd Skin Editor Simplifié</title>
   <style>
     body {
-      font-family: monospace;
-      background: #111;
-      color: white;
-      display: flex;
-      flex-wrap: wrap;
-      padding: 20px;
-      gap: 20px;
+      background: #121212; color: #eee; font-family: monospace;
+      display: flex; flex-wrap: wrap; gap: 20px; padding: 20px;
     }
-    canvas { border: 1px solid #333; }
-    .preview { image-rendering: pixelated; max-width: 128px; }
-    textarea { width: 100%; height: 150px; background: #222; color: lime; padding: 10px; }
-    button { margin-top: 10px; }
-    #status { margin-top: 10px; font-size: 14px; }
+    #viewer { width: 300px; height: 300px; border: 1px solid #444; }
+    #texturePreview { image-rendering: pixelated; max-width: 128px; display: none; border: 1px solid #444; }
+    textarea { width: 400px; height: 150px; background: #222; color: #0f0; padding: 10px; border: none; }
+    button { margin-top: 10px; padding: 10px; cursor: pointer; }
+    #status { margin-top: 10px; font-weight: bold; min-height: 1.2em; }
   </style>
 </head>
 <body>
 
   <div>
-    <h2>🎨 Texture</h2>
-    <input type="file" id="textureInput" accept="image/*"><br>
-    <img id="texturePreview" class="preview" style="display:none;"><br>
-    <button id="uploadBtn" style="display:none;">✅ Upload</button>
-    <button id="downloadZipBtn" disabled>📦 Télécharger ZIP</button>
+    <h2>🎨 Choisir la texture</h2>
+    <input type="file" id="textureInput" accept="image/*" />
+    <br />
+    <img id="texturePreview" />
+    <br />
+    <button id="uploadBtn" disabled>Upload la texture sur le modèle</button>
+    <br />
+    <button id="downloadZipBtn" disabled>Télécharger le pack ZIP</button>
     <div id="status"></div>
   </div>
 
   <div>
-    <h2>🧍‍♂️ Skin Preview</h2>
-    <div id="viewer" style="width: 300px; height: 300px;"></div>
+    <h2>👤 Prévisualisation du skin</h2>
+    <div id="viewer"></div>
   </div>
 
-  <div style="flex: 1;">
-    <h2>📜 Code Bloxd</h2>
+  <div>
+    <h2>📜 Code Bloxd (fixe)</h2>
     <textarea readonly>
 api.updateEntityNodeMeshAttachment(myId, "ArmRightMesh", "BloxdBlock", {blockName:"INTERNAL_MESH_Blue Balloon", size: 0.382, meshOffset:[0, 0, 0]}, [0, -0.74, 0], [0, 3.145, 0])
 api.updateEntityNodeMeshAttachment(myId, "ArmLeftMesh", "BloxdBlock", {blockName:"INTERNAL_MESH_Black Balloon", size: 0.382, meshOffset:[0, 0, 0]}, [0, -0.74, 0], [0, 3.145, 0])
@@ -51,27 +49,29 @@ api.updateEntityNodeMeshAttachment(myId, "LegRightMesh", "BloxdBlock", {blockNam
   <script src="https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.160.1/examples/js/loaders/GLTFLoader.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
   <script>
     const textureInput = document.getElementById("textureInput");
     const texturePreview = document.getElementById("texturePreview");
     const uploadBtn = document.getElementById("uploadBtn");
-    const status = document.getElementById("status");
     const downloadBtn = document.getElementById("downloadZipBtn");
+    const status = document.getElementById("status");
 
     let textureFile = null;
     let textureURL = null;
+    let model = null;
     let skinLoaded = false;
 
-    // THREE.js Setup
+    // Setup three.js scene
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ alpha: true });
+    camera.position.z = 2;
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
     renderer.setSize(300, 300);
     document.getElementById("viewer").appendChild(renderer.domElement);
-    camera.position.z = 2;
-    scene.add(new THREE.AmbientLight(0xffffff));
 
-    let model = null;
+    const light = new THREE.AmbientLight(0xffffff, 1);
+    scene.add(light);
 
     function animate() {
       requestAnimationFrame(animate);
@@ -80,87 +80,109 @@ api.updateEntityNodeMeshAttachment(myId, "LegRightMesh", "BloxdBlock", {blockNam
     }
     animate();
 
-    textureInput.addEventListener("change", e => {
+    textureInput.addEventListener("change", (e) => {
       const file = e.target.files[0];
       if (!file) return;
       textureFile = file;
+
+      if (textureURL) URL.revokeObjectURL(textureURL);
       textureURL = URL.createObjectURL(file);
       texturePreview.src = textureURL;
       texturePreview.style.display = "block";
-      uploadBtn.style.display = "inline-block";
-      status.textContent = "Texture importée. Clique sur 'Upload'.";
+
+      status.textContent = "Texture chargée. Clique sur 'Upload'.";
+      uploadBtn.disabled = false;
+      skinLoaded = false;
+      downloadBtn.disabled = true;
     });
 
     uploadBtn.addEventListener("click", () => {
       if (!textureURL) return;
 
-      status.textContent = "⏳ Chargement du skin...";
+      status.textContent = "Chargement du skin...";
       uploadBtn.disabled = true;
 
       const texLoader = new THREE.TextureLoader();
-      texLoader.load(textureURL, texture => {
-        texture.magFilter = THREE.NearestFilter;
-        texture.minFilter = THREE.NearestFilter;
+      texLoader.load(textureURL,
+        (texture) => {
+          texture.magFilter = THREE.NearestFilter;
+          texture.minFilter = THREE.NearestFilter;
 
-        const loader = new THREE.GLTFLoader();
-        loader.load("https://github.com/Cazozozop/bloxd-skin/raw/main/Skin.gltf", gltf => {
-          gltf.scene.traverse(child => {
-            if (child.isMesh && child.material) {
-              child.material.map = texture;
-              child.material.needsUpdate = true;
+          const loader = new THREE.GLTFLoader();
+          loader.load(
+            "https://github.com/Cazozozop/bloxd-skin/raw/main/Skin.gltf",
+            (gltf) => {
+              gltf.scene.traverse((child) => {
+                if (child.isMesh && child.material) {
+                  child.material.map = texture;
+                  child.material.needsUpdate = true;
+                }
+              });
+
+              if (model) scene.remove(model);
+              model = gltf.scene;
+              scene.add(model);
+
+              status.textContent = "Skin chargé et affiché !";
+              uploadBtn.disabled = false;
+              skinLoaded = true;
+              downloadBtn.disabled = false;
+            },
+            undefined,
+            (err) => {
+              console.error(err);
+              status.textContent = "Erreur : impossible de charger le modèle.";
+              uploadBtn.disabled = false;
             }
-          });
-
-          if (model) scene.remove(model);
-          model = gltf.scene;
-          scene.add(model);
-
-          status.textContent = "✅ Skin affiché ! Tu peux maintenant télécharger le pack.";
-          uploadBtn.disabled = false;
-          downloadBtn.disabled = false;
-          skinLoaded = true;
-        }, err => {
+          );
+        },
+        undefined,
+        (err) => {
           console.error(err);
-          status.textContent = "❌ Erreur lors du chargement du modèle.";
+          status.textContent = "Erreur : impossible de charger la texture.";
           uploadBtn.disabled = false;
-        });
-      }, err => {
-        console.error(err);
-        status.textContent = "❌ Erreur lors du chargement de la texture.";
-        uploadBtn.disabled = false;
-      });
+        }
+      );
     });
 
     downloadBtn.addEventListener("click", async () => {
       if (!textureFile || !skinLoaded) {
-        alert("Upload d'abord une texture et attends le rendu :)");
+        alert("Tu dois d'abord charger et uploader une texture.");
         return;
       }
 
+      const zip = new JSZip();
       const files = [
-        "Body.glb", "Head.glb", "Right Arm.glb",
-        "Left Arm.glb", "Right Leg.glb", "Left Leg.glb"
+        "Body.glb",
+        "Head.glb",
+        "Right Arm.glb",
+        "Left Arm.glb",
+        "Right Leg.glb",
+        "Left Leg.glb",
       ];
 
-      const zip = new JSZip();
-      for (const name of files) {
-        const url = `https://github.com/Cazozozop/bloxd-skin/raw/main/${encodeURIComponent(name)}`;
-        try {
-          const blob = await fetch(url).then(r => r.blob());
-          zip.file(name, blob);
-        } catch (err) {
-          console.error("Erreur sur", name);
-          status.textContent = `❌ Impossible de télécharger ${name}`;
-          return;
-        }
-      }
+      status.textContent = "Téléchargement des fichiers...";
 
-      zip.file("skin.png", textureFile);
-      const content = await zip.generateAsync({ type: "blob" });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(content);
-      link.download = "bloxd-skin-pack.zip";
-      link.click();
+      try {
+        for (const name of files) {
+          const url = `https://github.com/Cazozozop/bloxd-skin/raw/main/${encodeURIComponent(name)}`;
+          const res = await fetch(url);
+          if (!res.ok) throw new Error("Erreur téléchargement " + name);
+          const blob = await res.blob();
+          zip.file(name, blob);
+        }
+        zip.file("skin.png", textureFile);
+        const content = await zip.generateAsync({ type: "blob" });
+
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(content);
+        a.download = "bloxd-skin-pack.zip";
+        a.click();
+        status.textContent = "Pack ZIP prêt !";
+      } catch (e) {
+        console.error(e);
+        status.textContent = "Erreur lors du téléchargement.";
+      }
     });
   </script>
 </body>
