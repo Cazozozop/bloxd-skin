@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Bloxd Skin Viewer</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #111; }
+    #uploader {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 1;
+      background: white;
+      padding: 10px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div id="uploader">
+    <input type="file" id="textureInput" accept="image/*" />
+  </div>
+
+  <script type="module">
+    import * as THREE from "https://unpkg.com/three@0.158.0/build/three.module.js";
+    import { GLTFLoader } from "https://unpkg.com/three@0.158.0/examples/jsm/loaders/GLTFLoader.js";
+    import { OrbitControls } from "https://unpkg.com/three@0.158.0/examples/jsm/controls/OrbitControls.js";
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 1.6, 3);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 1, 0);
+    controls.update();
+
+    const loader = new GLTFLoader();
+
+    const baseUrl = "https://github.com/Cazozozop/bloxd-skin/raw/main/";
+    const parts = [
+      { name: "Head",     y: 1.6 },
+      { name: "Body",     y: 1.0 },
+      { name: "ArmRight", y: 1.0, x: -0.6 },
+      { name: "ArmLeft",  y: 1.0, x: 0.6 },
+      { name: "LegRight", y: 0.4, x: -0.3 },
+      { name: "LegLeft",  y: 0.4, x: 0.3 }
+    ];
+
+    const models = [];
+
+    // Charger toutes les parties
+    parts.forEach(part => {
+      loader.load(baseUrl + part.name + ".glb", gltf => {
+        const model = gltf.scene;
+        model.position.set(part.x || 0, part.y, part.z || 0);
+        scene.add(model);
+        models.push(model);
+      });
+    });
+
+    // Appliquer une texture choisie
+    document.getElementById("textureInput").addEventListener("change", function (e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function (event) {
+        const texture = new THREE.TextureLoader().load(event.target.result, () => {
+          texture.flipY = false;
+          models.forEach(model => {
+            model.traverse(child => {
+              if (child.isMesh) {
+                child.material.map = texture;
+                child.material.needsUpdate = true;
+              }
+            });
+          });
+        });
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Redimensionner
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Animation
+    function animate() {
+      requestAnimationFrame(animate);
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>
