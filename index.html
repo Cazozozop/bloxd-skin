@@ -17,6 +17,7 @@
     .preview { image-rendering: pixelated; max-width: 128px; }
     #buttons button { margin-top: 10px; display: block; }
     textarea { width: 100%; height: 150px; background: #222; color: lime; padding: 10px; }
+    #status { margin-top: 10px; font-size: 14px; }
   </style>
 </head>
 <body>
@@ -28,6 +29,7 @@
     <div id="buttons">
       <button id="uploadBtn" style="display:none;">✅ Upload</button>
       <button id="downloadZipBtn">📦 Télécharger ZIP</button>
+      <div id="status"></div>
     </div>
   </div>
 
@@ -57,6 +59,7 @@ api.updateEntityNodeMeshAttachment(myId, "LegRightMesh", "BloxdBlock", {blockNam
     const texturePreview = document.getElementById('texturePreview');
     const uploadBtn = document.getElementById('uploadBtn');
     const viewer = document.getElementById('viewer');
+    const status = document.getElementById('status');
 
     // Setup THREE.js
     const scene = new THREE.Scene();
@@ -87,19 +90,23 @@ api.updateEntityNodeMeshAttachment(myId, "LegRightMesh", "BloxdBlock", {blockNam
       texturePreview.src = textureURL;
       texturePreview.style.display = "block";
       uploadBtn.style.display = "inline-block";
+      status.textContent = "";
     });
 
     uploadBtn.addEventListener('click', () => {
       if (!textureFile) return;
 
+      status.textContent = "⏳ Chargement...";
+      uploadBtn.disabled = true;
+
       const loader = new THREE.GLTFLoader();
       const textureLoader = new THREE.TextureLoader();
 
-      loader.load("https://github.com/Cazozozop/bloxd-skin/raw/main/Skin.gltf", gltf => {
-        const skinTexture = textureLoader.load(textureURL, () => {
-          skinTexture.magFilter = THREE.NearestFilter;
-          skinTexture.minFilter = THREE.NearestFilter;
+      textureLoader.load(textureURL, skinTexture => {
+        skinTexture.magFilter = THREE.NearestFilter;
+        skinTexture.minFilter = THREE.NearestFilter;
 
+        loader.load("https://github.com/Cazozozop/bloxd-skin/raw/main/Skin.gltf", gltf => {
           gltf.scene.traverse(child => {
             if (child.isMesh && child.material) {
               child.material.map = skinTexture;
@@ -110,7 +117,16 @@ api.updateEntityNodeMeshAttachment(myId, "LegRightMesh", "BloxdBlock", {blockNam
           if (model) scene.remove(model);
           model = gltf.scene;
           scene.add(model);
+
+          status.textContent = "✅ Skin appliqué !";
+          uploadBtn.disabled = false;
+        }, undefined, err => {
+          status.textContent = "❌ Erreur de chargement GLTF.";
+          uploadBtn.disabled = false;
         });
+      }, undefined, err => {
+        status.textContent = "❌ Erreur de chargement texture.";
+        uploadBtn.disabled = false;
       });
     });
 
@@ -121,7 +137,7 @@ api.updateEntityNodeMeshAttachment(myId, "LegRightMesh", "BloxdBlock", {blockNam
       const zip = new JSZip();
 
       for (const name of files) {
-        const url = `https://github.com/Cazozozop/bloxd-skin/raw/main/${name}`;
+        const url = `https://github.com/Cazozozop/bloxd-skin/raw/main/${encodeURIComponent(name)}`;
         const blob = await fetch(url).then(res => res.blob());
         zip.file(name, blob);
       }
